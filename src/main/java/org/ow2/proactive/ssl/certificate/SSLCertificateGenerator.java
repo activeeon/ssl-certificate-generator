@@ -1,6 +1,5 @@
 package org.ow2.proactive.ssl.certificate;
 
-import org.apache.commons.cli.*;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
 import org.shredzone.acme4j.*;
 import org.shredzone.acme4j.challenge.Challenge;
@@ -403,7 +402,7 @@ public class SSLCertificateGenerator {
     public static void main(String... args) {
 
         if (args.length == 0) {
-            LOG.error("Usage: SSL Certificate Generator <domain>...");
+            LOG.error("SSL Certificate Generator requires the certicate domains as argument ..");
             System.exit(1);
         }
 

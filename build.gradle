@@ -42,7 +42,6 @@ wrapper {
 }
 
 shadowJar {
-    baseName = "SSLCertificateGenerator-all"
     classifier = null
     version = version
     configurations = [project.configurations.compile]
@@ -53,14 +52,12 @@ shadowJar {
     }
 }
 
-/*task jettyWebResource(type: shadowJar) {
-    baseName = "jettyWebResource-all"
-    classifier = null
-    version = version
-    configurations = [project.configurations.compile]
+task jettyWebResource(type: Jar, dependsOn: shadowJar) {
+    baseName = 'jetty-web-resource'
+    from zipTree(shadowJar.archivePath)
     manifest {
         attributes 'Implementation-Title': 'Fat jar for Jetty Web Resource',
                 'Implementation-Version': version,
                 'Main-Class': 'org.ow2.proactive.ssl.jetty.EmbeddedJetty'
     }
-}*/
+}
