@@ -42,6 +42,7 @@ wrapper {
 }
 
 shadowJar {
+    baseName = project.name + '-all'
     classifier = null
     version = version
     configurations = [project.configurations.compile]
@@ -49,15 +50,5 @@ shadowJar {
         attributes 'Implementation-Title': 'Fat jar for Activeeon SSL certificate generator',
                 'Implementation-Version': version,
                 'Main-Class': 'org.ow2.proactive.ssl.certificate.SSLCertificateGenerator'
-    }
-}
-
-task jettyWebResource(type: Jar, dependsOn: shadowJar) {
-    baseName = 'jetty-web-resource'
-    from zipTree(shadowJar.archivePath)
-    manifest {
-        attributes 'Implementation-Title': 'Fat jar for Jetty Web Resource',
-                'Implementation-Version': version,
-                'Main-Class': 'org.ow2.proactive.ssl.jetty.EmbeddedJetty'
     }
 }

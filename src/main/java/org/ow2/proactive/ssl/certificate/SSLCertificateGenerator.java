@@ -1,6 +1,9 @@
 package org.ow2.proactive.ssl.certificate;
 
+import org.apache.commons.cli.*;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
+import org.ow2.proactive.ssl.jetty.EmbeddedJetty;
+import org.ow2.proactive.ssl.jetty.WebResource;
 import org.shredzone.acme4j.*;
 import org.shredzone.acme4j.challenge.Challenge;
 import org.shredzone.acme4j.challenge.Dns01Challenge;
@@ -11,12 +14,11 @@ import org.shredzone.acme4j.util.KeyPairUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.swing.*;
 import java.io.*;
 import java.net.URI;
 import java.security.KeyPair;
 import java.security.Security;
-import java.util.Arrays;
+import java.util.ArrayList;
 import java.util.Collection;
 
 public class SSLCertificateGenerator {
@@ -43,6 +45,21 @@ public class SSLCertificateGenerator {
 
     private enum ChallengeType { HTTP, DNS }
 
+    // Port used by embedded jetty
+    private static int port = 8080;
+
+    // Web application context
+    private static String context = "/";
+
+    // Resource base used by embedded jetty
+    private static String base = ".";
+
+    // Directory under which the web resource is created
+    private static final String DIRECTORY = ".well-known" + File.separator + "acme-challenge";
+
+    private static Collection<String> domains = new ArrayList<>();
+
+
     /**
      * Generates a certificate for the given domains. Also takes care for the registration
      * process.
@@ -56,7 +73,7 @@ public class SSLCertificateGenerator {
 
         // Create a session for Let's Encrypt.
         // Use "acme://letsencrypt.org" for production server
-        Session session = new Session("acme://letsencrypt.org/staging");
+        Session session = new Session("acme://letsencrypt.org");
 
         // Get the Account.
         // If there is no account yet, create a new one.
@@ -185,11 +202,6 @@ public class SSLCertificateGenerator {
      * @return {@link Login} that is connected to your account
      */
     private Account findOrRegisterAccount(Session session, KeyPair accountKey) throws AcmeException {
-        // Ask the user to accept the TOS, if server provides us with a link.
-        URI tos = session.getMetadata().getTermsOfService();
-        if (tos != null) {
-            acceptAgreement(tos);
-        }
 
         Account account = new AccountBuilder()
                 .agreeToTermsOfService()
@@ -262,7 +274,6 @@ public class SSLCertificateGenerator {
         }
 
         LOG.info("Challenge has been completed. Remember to remove the validation resource.");
-        completeChallenge("Challenge has been completed.\nYou can remove the resource again now.");
     }
 
     /**
@@ -293,20 +304,33 @@ public class SSLCertificateGenerator {
         LOG.info("File name: {}", challenge.getToken());
         LOG.info("Content: {}", challenge.getAuthorization());
         LOG.info("The file must not contain any leading or trailing whitespaces or line breaks!");
-        LOG.info("If you're ready, dismiss the dialog...");
 
-        StringBuilder message = new StringBuilder();
-        message.append("Please create a file in your web server's base directory.\n\n");
-        message.append("http://")
-                .append(auth.getIdentifier().getDomain())
-                .append("/.well-known/acme-challenge/")
-                .append(challenge.getToken())
-                .append("\n\n");
-        message.append("Content:\n\n");
-        message.append(challenge.getAuthorization());
-        acceptChallenge(message.toString());
+        Runnable r = () -> createWebResource(challenge.getToken(),challenge.getAuthorization());
+        new Thread(r).start();
 
         return challenge;
+    }
+
+    /**
+     * Creates the web resource required for the challenge.
+     * <p>
+     * Creates a TXT record with a certain content to meet the challenge.
+     * <p>
+     * It further starts an embedded Jetty server to serve the created web resource.
+     *
+     * @param webResource TXT record to meet the {@link Challenge}.
+     * @param content content of the TXT record to meet the {@link Challenge}.
+     */
+    private void createWebResource(String webResource, String content){
+        try {
+            WebResource.createWebResource(base + File.separator + DIRECTORY, webResource, content);
+            EmbeddedJetty.startJetty(port, context, base);
+            wait(1);
+        } catch (IOException e){
+            LOG.error("Error while creating the web resource {} with content {}. \n Error: {}", base+File.separator+DIRECTORY+File.separator+webResource, content, e.getMessage());
+        } catch (Exception e){
+            LOG.error("Error while starting embedded Jetty web server with port {} and context {}. \n Error: {}", port, context, e.getMessage());
+        }
     }
 
     /**
@@ -334,89 +358,99 @@ public class SSLCertificateGenerator {
                 auth.getIdentifier().getDomain(), challenge.getDigest());
         LOG.info("If you're ready, dismiss the dialog...");
 
-        StringBuilder message = new StringBuilder();
-        message.append("Please create a TXT record:\n\n");
-        message.append("_acme-challenge.")
-                .append(auth.getIdentifier().getDomain())
-                .append(". IN TXT ")
-                .append(challenge.getDigest());
-        acceptChallenge(message.toString());
-
         return challenge;
     }
 
     /**
-     * Presents the instructions for preparing the challenge validation, and waits for
-     * dismissal. If the user cancelled the dialog, an exception is thrown.
-     *
-     * @param message
-     *            Instructions to be shown in the dialog
-     */
-    public void acceptChallenge(String message) throws AcmeException {
-        int option = JOptionPane.showConfirmDialog(null,
-                message,
-                "Prepare Challenge",
-                JOptionPane.OK_CANCEL_OPTION);
-        if (option == JOptionPane.CANCEL_OPTION) {
-            throw new AcmeException("User cancelled the challenge");
-        }
-    }
-
-    /**
-     * Presents the instructions for removing the challenge validation, and waits for
-     * dismissal.
-     *
-     * @param message
-     *            Instructions to be shown in the dialog
-     */
-    public void completeChallenge(String message) {
-        JOptionPane.showMessageDialog(null,
-                message,
-                "Complete Challenge",
-                JOptionPane.INFORMATION_MESSAGE);
-    }
-
-    /**
-     * Presents the user a link to the Terms of Service, and asks for confirmation. If the
-     * user denies confirmation, an exception is thrown.
-     *
-     * @param agreement
-     *            {@link URI} of the Terms of Service
-     */
-    public void acceptAgreement(URI agreement) throws AcmeException {
-        int option = JOptionPane.showConfirmDialog(null,
-                "Do you accept the Terms of Service?\n\n" + agreement,
-                "Accept ToS",
-                JOptionPane.YES_NO_OPTION);
-        if (option == JOptionPane.NO_OPTION) {
-            throw new AcmeException("User did not accept Terms of Service");
-        }
-    }
-
-    /**
-     * Invokes this example.
+     * Invokes SSLCertificateGenerator.
      *
      * @param args
-     *            Domains to get a certificate for
+     *            Arguments needed to generate the SSL certificate
      */
     public static void main(String... args) {
-
-        if (args.length == 0) {
-            LOG.error("SSL Certificate Generator requires the certicate domains as argument ..");
-            System.exit(1);
-        }
-
-        LOG.info("Starting up...");
-
-        Security.addProvider(new BouncyCastleProvider());
-
-        Collection<String> domains = Arrays.asList(args);
         try {
+
+            parseArguments( args);
+
+            LOG.info("Starting up...");
+
+            Security.addProvider(new BouncyCastleProvider());
+
             SSLCertificateGenerator sslCertificateGenerator = new SSLCertificateGenerator();
             sslCertificateGenerator.fetchCertificate(domains);
         } catch (Exception ex) {
             LOG.error("Failed to get a certificate for domains " + domains, ex);
         }
+    }
+
+    /**
+     * Parses input arguments.
+     *
+     * @param args
+     *            Arguments needed to generate the SSL certificate
+     */
+    public static void parseArguments(String... args) throws ParseException {
+
+        final Option help = Option.builder("h")
+                .required(false)
+                .longOpt("help")
+                .hasArg(false)
+                .desc("Help.")
+                .build();
+        final Option application = Option.builder("a")
+                .required(false)
+                .longOpt("application")
+                .hasArg(true)
+                .desc("Web application context")
+                .build();
+        final Option jettyPort = Option.builder("p")
+                .required(false)
+                .hasArg(true)
+                .longOpt("port")
+                .desc("Port used by embedded jetty.")
+                .build();
+        final Option resourceBase = Option.builder("b")
+                .required(false)
+                .hasArg(true)
+                .longOpt("base")
+                .desc("Resource base used by jetty.")
+                .build();
+        final Option domain = Option.builder("d")
+                .required(true)
+                .hasArg(true)
+                .longOpt("domain")
+                .desc("Domain to get the certificate for.")
+                .build();
+
+        final Options options = new Options();
+        options.addOption(help);
+        options.addOption(application);
+        options.addOption(jettyPort);
+        options.addOption(resourceBase);
+        options.addOption(domain);
+
+        CommandLineParser parser = new DefaultParser();
+        CommandLine cmd = parser.parse( options, args);
+
+        if (cmd.hasOption("h")){
+            // automatically generate the help statement
+            HelpFormatter formatter = new HelpFormatter();
+            formatter.printHelp( "SSL Certificate Generator", options );
+            System.exit(0);
+        } else {
+            if (cmd.hasOption("a")){
+                context = cmd.getOptionValue("a");
+            }
+            if (cmd.hasOption("b")){
+                base = cmd.getOptionValue("b");
+            }
+
+            if (cmd.hasOption("p")){
+                port = Integer.valueOf(cmd.getOptionValue("p"));
+            }
+        }
+
+        domains.add(cmd.getOptionValue("d"));
     }
 }
 
