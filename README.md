@@ -20,11 +20,9 @@ The script `generate_trusted_cert_and_keystore_for_localhost.sh` uses two files:
 ## 2. SSL certificate for specific domain (*e.g., try.activeeon.com*)
 We extend an existing [ Java client](https://github.com/shred/acme4j) to generate SSL certificates for a specific domain.
 The java client uses the ACME ([Automatic Certificate Management Environment](https://tools.ietf.org/html/draft-ietf-acme-acme)) protocol to connect to an ACME server, notably _Let's Encrypt_ server. It performs all necessary steps to generate SSL certificates. Our Java client mainly contains three classes:
-
-
-a) **SSLCertificateGenerator**: Its role is twofold: (i) it creates a domain challenge, i.e., a specific static web resource that sould be accessible under the considered domain, and (ii) generate SSL certificate for the considered domain one the ACME challenge is met.
-b) **WebResource**: It creates the static web resource needed to meet the ACME challenge.
-c) **EmbeddedJetty**: It runs an embedded web application server (Jetty) that serves the created static web resource.
+- **SSLCertificateGenerator**: Its role is twofold: (i) it creates a domain challenge, i.e., a specific static web resource that sould be accessible under the considered domain, and (ii) generate SSL certificate for the considered domain one the ACME challenge is met.
+- **WebResource**: It creates the static web resource needed to meet the ACME challenge.
+- **EmbeddedJetty**: It runs an embedded web application server (Jetty) that serves the created static web resource.
 
 As an example of ACME challenge (required to generate the SSL certificate for a given domain)
 - The following resource  must be created:
@@ -49,8 +47,8 @@ The jar takes further arguments as input. To get more help about these arguments
 ##### Meet ACME challenge when using a web server to access the considered domain
 When the domain (concerned by the SSL certificate) is accessible via a web server like Apache or Nginx, the static resources created to meet the ACME challenge cannot be served by the web server in a straightforward manner. To cope with this issue, two solutions are proposed:
 
-i) Place and run *`ssl-certificate-generator-all-xxxxVersion.jar`* under the resources directory of the web server, e.g., under `/var/www/html` when using `nginx`.
-ii) Add the location (where *`ssl-certificate-generator-all-xxxxVersion.jar`*  is placed) to the configuration of the web server. For instance, when using `nginx` add the following block:
+- Place and run *`ssl-certificate-generator-all-xxxxVersion.jar`* under the resources directory of the web server, e.g., under `/var/www/html` when using `nginx`.
+- Or add the location (where *`ssl-certificate-generator-all-xxxxVersion.jar`*  is placed) to the configuration of the web server. For instance, when using `nginx` add the following block:
 ```
 location ^~ /.well-known/acme-challenge/ {
     allow  all;
